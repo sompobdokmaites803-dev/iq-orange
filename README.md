@@ -1,1 +1,1 @@
-IQ Orange v6.1 Basic 8 fix: one Twelve Data 5m request per pair; aggregate 15m/1H locally.
+v6.2 adds Upload Snap Screen + Step 2 AI confirm to the working v6.1 Basic 8 scan.

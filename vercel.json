@@ -2,6 +2,9 @@
   "functions": {
     "api/scan.py": {
       "maxDuration": 30
+    },
+    "api/analyze.py": {
+      "maxDuration": 60
     }
   }
 }
