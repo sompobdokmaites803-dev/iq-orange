@@ -1,0 +1,1 @@
+IQ Orange v6.1 Basic 8 fix: one Twelve Data 5m request per pair; aggregate 15m/1H locally.
