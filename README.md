@@ -1,1 +1,2 @@
 v6.2 adds Upload Snap Screen + Step 2 AI confirm to the working v6.1 Basic 8 scan.
+Vercel deploy trigger
