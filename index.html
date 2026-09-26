@@ -1,424 +1,54 @@
-import os
-import json
-import urllib.request
-import urllib.error
-import time
-import math
-from datetime import datetime, timezone, timedelta
-from http.server import BaseHTTPRequestHandler
-
-
-def call_openai(payload, key):
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
-        data=json.dumps(payload).encode(),
-        headers={
-            "Authorization": "Bearer " + key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=45) as r:
-            return json.loads(r.read().decode())
-
-    except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="ignore")
-        raise RuntimeError(
-            f"OpenAI HTTP {e.code}: {body}"
-        )
-
-
-def extract_output_text(resp):
-    if isinstance(resp.get("output_text"), str):
-        return resp["output_text"]
-
-    texts = []
-
-    for item in resp.get("output", []):
-        if not isinstance(item, dict):
-            continue
-
-        for content in item.get("content", []):
-            if not isinstance(content, dict):
-                continue
-
-            if (
-                content.get("type") == "output_text"
-                and isinstance(content.get("text"), str)
-            ):
-                texts.append(content["text"])
-
-            if content.get("type") == "refusal":
-                raise RuntimeError(
-                    "AI refused: "
-                    + str(content.get("refusal", ""))
-                )
-
-    return "\n".join(texts)
-
-
-class handler(BaseHTTPRequestHandler):
-
-    def do_POST(self):
-
-        try:
-            n = int(
-                self.headers.get(
-                    "Content-Length",
-                    "0"
-                )
-            )
-
-            body = json.loads(
-                self.rfile.read(n).decode()
-            )
-
-            key = os.environ.get(
-                "OPENAI_API_KEY"
-            )
-
-            if not key:
-                raise RuntimeError(
-                    "ยังไม่ได้ตั้ง OPENAI_API_KEY"
-                )
-
-            image = body.get("image")
-
-            if not image:
-                raise RuntimeError(
-                    "ไม่มี screenshot สำหรับ STEP 2"
-                )
-
-            pair = body.get("pair", "")
-            stage1_direction = body.get(
-                "stage1_direction",
-                "WAIT"
-            )
-            stage1_score = int(
-                body.get("stage1_score", 0) or 0
-            )
-
-            prompt = f"""
-คุณคือ STEP 2 FINAL SNAP CONFIRM ของ IQ ORANGE 10M v6.3
-
-โครงสร้างระบบ:
-- 10m = MAIN SETUP
-- 15m = Trend confirm
-- 1H = Big trend
-- Screenshot = Final visual confirmation
-
-คู่เงิน: {pair}
-STEP 1 direction: {stage1_direction}
-STEP 1 score: {stage1_score}
-
-หน้าที่ของคุณ:
-ประเมิน screenshot ล่าสุดจาก IQ Option ว่า
-ภาพช่วยยืนยันหรือหักล้าง STEP 1 มากน้อยแค่ไหน
-
-ใช้คำ direction ชุดเดียวกับระบบเท่านั้น:
-CALL / PUT / WAIT
-
-ให้ประเมินจาก:
-- trend ล่าสุด
-- candle structure
-- support / resistance
-- breakout / rejection
-- momentum
-- stochastic
-- RSI หรือ indicator ที่มองเห็น
-- ระยะจากแนวรับ/แนวต้าน
-- สัญญาณว่าราคาอ่อนแรงหรือเร่งตัว
-- ความสอดคล้องกับ STEP 1
-
-สำคัญ:
-อย่าเพียงคัดลอก score ของ STEP 1
-ให้ประเมิน screenshot อย่างอิสระ แล้วระบุ
-confirm_delta ว่าภาพควรเพิ่มหรือลดความมั่นใจเท่าไร
-
-confirm_delta:
--20 ถึง +20
-
-ตัวอย่าง:
-- ภาพยืนยัน trend + momentum ชัด: +10 ถึง +20
-- ยืนยันบางส่วน: +3 ถึง +9
-- ยังไม่ชัด: -2 ถึง +2
-- มีสัญญาณขัดแย้ง: -5 ถึง -12
-- ขัดแย้งมาก / setup เสีย: -13 ถึง -20
-
-กฎ:
-1. ถ้าภาพยืนยัน STEP 1 ชัด ให้ direction เดิม
-2. ถ้าภาพขัดแย้ง ให้ WAIT หรือ direction ที่เห็นจริง
-3. ถ้า screenshot ไม่ชัด / popup บัง / คู่เงินไม่ตรง ให้ WAIT
-4. READY ต้องใช้เมื่อหลักฐานภาพชัดจริง
-5. WAIT ห้าม READY
-6. reason เป็นภาษาไทยสั้น 1-2 ประโยค
-7. action เลือกเพียงหนึ่งข้อ:
-   พร้อมเข้า CALL
-   พร้อมเข้า PUT
-   รอแท่งถัดไป
-   รอ Stochastic cross
-   รอ Breakout confirm
-   รอ Momentum ยืนยัน
-   NO TRADE
-"""
-
-            schema = {
-                "type": "object",
-                "properties": {
-                    "direction": {
-                        "type": "string",
-                        "enum": [
-                            "CALL",
-                            "PUT",
-                            "WAIT"
-                        ]
-                    },
-                    "confirm_delta": {
-                        "type": "integer",
-                        "minimum": -20,
-                        "maximum": 20
-                    },
-                    "risk": {
-                        "type": "string",
-                        "enum": [
-                            "LOW",
-                            "MEDIUM",
-                            "HIGH"
-                        ]
-                    },
-                    "status": {
-                        "type": "string",
-                        "enum": [
-                            "READY",
-                            "WATCH",
-                            "NO TRADE"
-                        ]
-                    },
-                    "action": {
-                        "type": "string",
-                        "enum": [
-                            "พร้อมเข้า CALL",
-                            "พร้อมเข้า PUT",
-                            "รอแท่งถัดไป",
-                            "รอ Stochastic cross",
-                            "รอ Breakout confirm",
-                            "รอ Momentum ยืนยัน",
-                            "NO TRADE"
-                        ]
-                    },
-                    "reason": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "direction",
-                    "confirm_delta",
-                    "risk",
-                    "status",
-                    "action",
-                    "reason"
-                ],
-                "additionalProperties": False
-            }
-
-            payload = {
-                "model": "gpt-5.6-luna",
-                "input": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": prompt
-                            },
-                            {
-                                "type": "input_image",
-                                "image_url": image
-                            }
-                        ]
-                    }
-                ],
-                "text": {
-                    "format": {
-                        "type": "json_schema",
-                        "name": "iq_orange_step2_v64",
-                        "strict": True,
-                        "schema": schema
-                    }
-                },
-                "max_output_tokens": 450
-            }
-
-            resp = call_openai(
-                payload,
-                key
-            )
-
-            text = extract_output_text(resp)
-
-            if not text:
-                raise RuntimeError(
-                    "AI returned no output_text: "
-                    + json.dumps(
-                        resp,
-                        ensure_ascii=False
-                    )[:1200]
-                )
-
-            try:
-                d = json.loads(text)
-
-            except Exception:
-                raise RuntimeError(
-                    "AI JSON parse failed: "
-                    + text[:1000]
-                )
-
-            direction = d.get(
-                "direction",
-                "WAIT"
-            )
-
-            status = d.get(
-                "status",
-                "WATCH"
-            )
-
-            action = d.get(
-                "action",
-                "รอแท่งถัดไป"
-            )
-
-            delta = int(
-                d.get(
-                    "confirm_delta",
-                    0
-                )
-            )
-
-            final_score = max(
-                0,
-                min(
-                    100,
-                    stage1_score + delta
-                )
-            )
-
-            if direction == "WAIT":
-                if status == "READY":
-                    status = "WATCH"
-
-                if action in [
-                    "พร้อมเข้า CALL",
-                    "พร้อมเข้า PUT"
-                ]:
-                    action = "รอแท่งถัดไป"
-
-            # กันกรณี score ต่ำแต่ AI บอก READY
-            if final_score < 80 and status == "READY":
-                status = "WATCH"
-
-            if final_score < 65:
-                status = "NO TRADE"
-
-                if action in [
-                    "พร้อมเข้า CALL",
-                    "พร้อมเข้า PUT"
-                ]:
-                    action = "NO TRADE"
-
-            # risk ผูกกับ final score
-            if final_score >= 90:
-                risk = "LOW"
-            elif final_score >= 75:
-                risk = "MEDIUM"
-            else:
-                risk = "HIGH"
-
-            entry = None
-
-            if (
-                direction in ["CALL", "PUT"]
-                and status == "READY"
-            ):
-                ten_min = 600
-
-                ep = (
-                    math.floor(
-                        time.time() / ten_min
-                    ) + 1
-                ) * ten_min + 5
-
-                entry = datetime.fromtimestamp(
-                    ep,
-                    timezone(
-                        timedelta(hours=7)
-                    )
-                ).strftime(
-                    "%H:%M:%S"
-                )
-
-            out = {
-                "direction": direction,
-                "score": final_score,
-                "stage1_score": stage1_score,
-                "confirm_delta": delta,
-                "risk": risk,
-                "status": status,
-                "action": action,
-                "reason": d.get(
-                    "reason",
-                    ""
-                ),
-                "entry_time": entry,
-                "setup_tf": "10m",
-                "version": "6.4"
-            }
-
-            code = 200
-
-        except Exception as e:
-
-            out = {
-                "error": str(e)
-            }
-
-            code = 500
-
-        b = json.dumps(
-            out,
-            ensure_ascii=False
-        ).encode()
-
-        self.send_response(code)
-
-        self.send_header(
-            "Content-Type",
-            "application/json; charset=utf-8"
-        )
-
-        self.send_header(
-            "Cache-Control",
-            "no-store"
-        )
-
-        self.end_headers()
-
-        self.wfile.write(b)  margin-top:14px;
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IQ Orange 10M v6.4 — Setup + Snap Confirm</title>
+
+<style>
+:root{
+  --bg:#090b10;
+  --panel:#180f17;
+  --line:#5a2b3d;
+  --txt:#fff2f6;
+  --muted:#cda8b6;
+  --orange:#ff7a00;
+  --green:#37d58a;
+  --red:#ff6575;
 }
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--txt);
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+.wrap{max-width:1760px;margin:auto;padding:24px}
+.card{
+  background:linear-gradient(180deg,var(--panel),#120c13);
+  border:1px solid var(--line);
+  border-radius:22px;
+}
+.hero{
+  padding:24px;
+  display:flex;
+  justify-content:space-between;
+  gap:24px;
+}
+.hero h1{margin:4px 0 10px;font-size:42px}
+.ey{font-size:14px;font-weight:900}
+.sub{color:var(--muted);font-size:18px;line-height:1.5}
+.chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
 .chip{
   background:var(--orange);
-  color:#fff;
-  font-weight:900;
   padding:9px 14px;
   border-radius:12px;
+  font-weight:900;
 }
 .btn{
   border:0;
   background:#a93458;
-  color:#fff;
+  color:white;
   font-weight:900;
   font-size:22px;
   padding:18px 28px;
@@ -446,59 +76,25 @@ confirm_delta:
   grid-template-columns:1.2fr 1.4fr .9fr;
   gap:14px;
 }
-.summary .card{
-  padding:20px;
-}
-.lab{
-  color:#d7a7b8;
-  font-size:14px;
-  font-weight:800;
-  letter-spacing:1px;
-}
-.pairbig{
-  font-size:36px;
-  font-weight:900;
-  margin-top:6px;
-}
-.dirbig{
-  font-size:24px;
-  font-weight:900;
-  margin-top:4px;
-}
-.timebig{
-  font-size:54px;
-  font-weight:900;
-  color:var(--orange);
-  margin-top:8px;
-}
-.scorebig{
-  font-size:68px;
-  font-weight:900;
-}
-.sectiontitle{
-  margin:24px 0 12px;
-}
-.sectiontitle h2{
-  margin:0;
-}
+.summary .card{padding:20px}
+.lab{color:#d7a7b8;font-size:14px;font-weight:800}
+.pairbig{font-size:36px;font-weight:900}
+.dirbig{font-size:24px;font-weight:900}
+.timebig{font-size:54px;font-weight:900;color:var(--orange)}
+.scorebig{font-size:68px;font-weight:900}
+.sectiontitle{margin:24px 0 12px}
 .grid{
   display:grid;
   grid-template-columns:repeat(4,1fr);
   gap:14px;
 }
-.sig{
-  padding:16px;
-}
+.sig{padding:16px}
 .head{
   display:flex;
   justify-content:space-between;
   gap:12px;
-  align-items:flex-start;
 }
-.pname{
-  font-size:22px;
-  font-weight:900;
-}
+.pname{font-size:22px;font-weight:900}
 .badge{
   padding:6px 10px;
   border-radius:999px;
@@ -508,16 +104,8 @@ confirm_delta:
 .ready{background:#237a4b}
 .watch{background:#7a650d}
 .no{background:#7a2635}
-.score{
-  font-size:48px;
-  font-weight:900;
-  margin-top:10px;
-}
-.meta{
-  margin-top:6px;
-  line-height:1.55;
-  color:#edd9df;
-}
+.score{font-size:48px;font-weight:900;margin-top:10px}
+.meta{margin-top:6px;line-height:1.55}
 .snapbox{
   margin-top:14px;
   padding:12px;
@@ -552,10 +140,7 @@ confirm_delta:
   padding:11px;
   cursor:pointer;
 }
-.anbtn:disabled{
-  opacity:.45;
-  cursor:not-allowed;
-}
+.anbtn:disabled{opacity:.45}
 .resultbox{
   display:none;
   margin-top:10px;
@@ -564,13 +149,7 @@ confirm_delta:
   border-radius:10px;
   background:#0d1116;
 }
-.final{
-  margin-top:20px;
-  padding:22px;
-}
-.final h2{
-  margin-top:0;
-}
+.final{margin-top:20px;padding:22px}
 .actionBox{
   margin:18px 0;
   padding:22px;
@@ -581,13 +160,11 @@ confirm_delta:
 .actionLabel{
   font-size:14px;
   font-weight:800;
-  letter-spacing:1.5px;
   color:#f5a8bf;
 }
 .actionBig{
   margin-top:8px;
   font-size:40px;
-  line-height:1.12;
   font-weight:900;
   color:var(--orange);
 }
@@ -602,9 +179,7 @@ confirm_delta:
   border-radius:12px;
   padding:16px;
 }
-.finalitem b{
-  font-size:28px;
-}
+.finalitem b{font-size:28px}
 .reasonBig{
   margin-top:14px;
   padding:18px;
@@ -624,11 +199,7 @@ confirm_delta:
 }
 @media(max-width:900px){
   .hero{flex-direction:column}
-  .summary,.finalgrid{grid-template-columns:1fr}
-  .grid{grid-template-columns:1fr}
-  .timebig{font-size:42px}
-  .actionBig{font-size:30px}
-  .reasonBig{font-size:18px}
+  .summary,.finalgrid,.grid{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -637,31 +208,31 @@ confirm_delta:
 <main class="wrap">
 
 <section class="hero card">
-  <div>
-    <div class="ey">STEP 1 REAL-TIME → STEP 2 SNAP CONFIRM</div>
-    <h1>IQ ORANGE 10M v6.3</h1>
+<div>
+  <div class="ey">STEP 1 REAL-TIME → STEP 2 SNAP CONFIRM</div>
+  <h1>IQ ORANGE 10M v6.4</h1>
 
-    <div class="sub">
-      STEP 1 ใช้กราฟ 10 นาทีเป็น MAIN SETUP + 15m/1H ดูเทรนด์
-      → เลือกคู่คะแนนสูง → UPLOAD SNAP
-      → STEP 2 วิเคราะห์ภาพ IQ Option เพื่อยืนยัน CALL / PUT / WAIT และ ACTION NOW
-    </div>
-
-    <div class="chips">
-      <span class="chip">8 PAIRS</span>
-      <span class="chip">8 CREDITS</span>
-      <span class="chip">10M SETUP</span>
-      <span class="chip">UPLOAD SNAP</span>
-      <span class="chip">SELF ENTRY</span>
-    </div>
-
-    <div id="apiStatus" class="statusbar">รอสแกนข้อมูล...</div>
+  <div class="sub">
+    STEP 1 ใช้กราฟ 10 นาทีเป็น MAIN SETUP + 15m/1H ดูเทรนด์
+    → เลือกคู่คะแนนสูง → UPLOAD SNAP
+    → STEP 2 วิเคราะห์ภาพเพื่อยืนยัน CALL / PUT / WAIT และ ACTION NOW
   </div>
 
-  <div>
-    <button id="scanBtn" class="btn">สแกน STEP 1</button>
-    <div id="error"></div>
+  <div class="chips">
+    <span class="chip">8 PAIRS</span>
+    <span class="chip">8 CREDITS</span>
+    <span class="chip">10M SETUP</span>
+    <span class="chip">UPLOAD SNAP</span>
+    <span class="chip">SELF ENTRY</span>
   </div>
+
+  <div id="apiStatus" class="statusbar">รอสแกนข้อมูล...</div>
+</div>
+
+<div>
+  <button id="scanBtn" class="btn">สแกน STEP 1</button>
+  <div id="error"></div>
+</div>
 </section>
 
 <section class="summary">
@@ -686,49 +257,51 @@ confirm_delta:
 </section>
 
 <div class="sectiontitle">
-  <h2>STEP 1 · REAL-TIME 10M CHECK</h2>
+<h2>STEP 1 · REAL-TIME 10M CHECK</h2>
 </div>
 
 <section id="grid" class="grid"></section>
 
 <section class="final card">
-  <h2>STEP 2 · FINAL SNAP CONFIRM</h2>
 
-  <div class="actionBox">
-    <div class="actionLabel">ACTION NOW</div>
-    <div id="fAction" class="actionBig">รอวิเคราะห์...</div>
+<h2>STEP 2 · FINAL SNAP CONFIRM</h2>
+
+<div class="actionBox">
+  <div class="actionLabel">ACTION NOW</div>
+  <div id="fAction" class="actionBig">รอวิเคราะห์...</div>
+</div>
+
+<div class="finalgrid">
+  <div class="finalitem">
+    <div class="lab">คู่เงิน</div>
+    <b id="fPair">—</b>
   </div>
 
-  <div class="finalgrid">
-    <div class="finalitem">
-      <div class="lab">คู่เงิน</div>
-      <b id="fPair">—</b>
-    </div>
-
-    <div class="finalitem">
-      <div class="lab">ผล</div>
-      <b id="fDir">—</b>
-    </div>
-
-    <div class="finalitem">
-      <div class="lab">เวลาเข้า</div>
-      <b id="fTime">--:--:--</b>
-    </div>
-
-    <div class="finalitem">
-      <div class="lab">AI SCORE</div>
-      <b id="fScore">—</b>
-    </div>
+  <div class="finalitem">
+    <div class="lab">ผล</div>
+    <b id="fDir">—</b>
   </div>
 
-  <div id="fReason" class="reasonBig">
-    เลือกคู่คะแนนสูง → อัป Screenshot จาก IQ Option → วิเคราะห์ STEP 2
+  <div class="finalitem">
+    <div class="lab">เวลาเข้า</div>
+    <b id="fTime">--:--:--</b>
   </div>
+
+  <div class="finalitem">
+    <div class="lab">AI SCORE</div>
+    <b id="fScore">—</b>
+  </div>
+</div>
+
+<div id="fReason" class="reasonBig">
+เลือกคู่คะแนนสูง → อัป Screenshot → วิเคราะห์ STEP 2
+</div>
+
 </section>
 
 <script>
-const $ = x => document.getElementById(x);
-let data = [];
+const $=x=>document.getElementById(x);
+let data=[];
 
 function cls(d){
   if(d==="CALL") return "call";
@@ -752,158 +325,135 @@ function fileToDataURL(file){
 }
 
 function actionText(j){
-  const reason=(j.reason||"").toLowerCase();
-
-  if(j.status==="READY" && j.direction==="CALL"){
-    return "พร้อมเข้า CALL";
-  }
-
-  if(j.status==="READY" && j.direction==="PUT"){
-    return "พร้อมเข้า PUT";
-  }
-
-  if(j.direction==="WAIT"){
-    if(reason.includes("stochastic")){
-      return "รอ Stochastic cross";
-    }
-
-    if(reason.includes("breakout")){
-      return "รอ Breakout confirm";
-    }
-
-    if(reason.includes("momentum")){
-      return "รอ Momentum ยืนยัน";
-    }
-
-    return "รอแท่งถัดไป";
-  }
-
-  if(j.status==="WATCH"){
-    return "WATCH · รอ Confirm เพิ่ม";
-  }
-
+  if(j.status==="READY" && j.direction==="CALL") return "พร้อมเข้า CALL";
+  if(j.status==="READY" && j.direction==="PUT") return "พร้อมเข้า PUT";
+  if(j.direction==="WAIT") return "รอแท่งถัดไป";
+  if(j.status==="WATCH") return "WATCH · รอ Confirm เพิ่ม";
   return "NO TRADE";
 }
 
 function render(){
 
-  $("grid").innerHTML = data.map((x,i)=>`
-    <article class="sig card">
-      <div class="head">
-        <div>
-          <div class="pname">${x.pair}</div>
-        </div>
-        <div class="badge ${badge(x.status)}">${x.status}</div>
-      </div>
+  $("grid").innerHTML=data.map((x,i)=>`
+  <article class="sig card">
 
-      <div class="score">${x.score}<span style="font-size:16px">/100</span></div>
+    <div class="head">
+      <div class="pname">${x.pair}</div>
+      <div class="badge ${badge(x.status)}">${x.status}</div>
+    </div>
 
-      <div class="meta">
-        <b class="${cls(x.direction)}">${x.direction}</b><br>
-        Risk: <b>${x.risk}</b><br>
-        ${x.reason||""}
-      </div>
+    <div class="score">
+      ${x.score}<span style="font-size:16px">/100</span>
+    </div>
 
-      <div class="snapbox">
-        <label class="upl" for="f${i}">UPLOAD SNAP SCREEN</label>
-        <input id="f${i}" type="file" accept="image/*">
+    <div class="meta">
+      <b class="${cls(x.direction)}">${x.direction}</b><br>
+      Risk: <b>${x.risk}</b><br>
+      ${x.reason||""}
+    </div>
 
-        <img id="p${i}" class="preview">
+    <div class="snapbox">
 
-        <button id="a${i}" class="anbtn" disabled>
-          วิเคราะห์ STEP 2
-        </button>
+      <label class="upl" for="f${i}">
+        UPLOAD SNAP SCREEN
+      </label>
 
-        <div id="r${i}" class="resultbox"></div>
-      </div>
-    </article>
+      <input id="f${i}" type="file" accept="image/*">
+
+      <img id="p${i}" class="preview">
+
+      <button id="a${i}" class="anbtn" disabled>
+        วิเคราะห์ STEP 2
+      </button>
+
+      <div id="r${i}" class="resultbox"></div>
+
+    </div>
+
+  </article>
   `).join("");
 
   data.forEach((x,i)=>{
 
-    $("f"+i).onchange = () => {
-      const f = $("f"+i).files[0];
+    $("f"+i).onchange=()=>{
+      const f=$("f"+i).files[0];
 
       if(f){
-        $("p"+i).src = URL.createObjectURL(f);
-        $("p"+i).style.display = "block";
-        $("a"+i).disabled = false;
+        $("p"+i).src=URL.createObjectURL(f);
+        $("p"+i).style.display="block";
+        $("a"+i).disabled=false;
       }
     };
 
-    $("a"+i).onclick = () => analyze(i);
+    $("a"+i).onclick=()=>analyze(i);
   });
 }
 
 async function scan(){
 
-  $("scanBtn").disabled = true;
-  $("scanBtn").textContent = "SCANNING...";
-  $("error").style.display = "none";
-  $("apiStatus").textContent = "กำลังเรียก Twelve Data...";
+  $("scanBtn").disabled=true;
+  $("scanBtn").textContent="SCANNING...";
+  $("error").style.display="none";
+  $("apiStatus").textContent="กำลังเรียก Twelve Data...";
 
   try{
-    const r = await fetch("/api/scan",{
-      cache:"no-store"
-    });
 
-    const j = await r.json();
+    const r=await fetch("/api/scan",{cache:"no-store"});
+    const j=await r.json();
 
-    if(!r.ok){
-      throw new Error(j.error || "scan failed");
-    }
+    if(!r.ok) throw new Error(j.error||"scan failed");
 
-    data = j.top || [];
+    data=j.top||[];
 
-    $("apiStatus").textContent =
-      `เชื่อมสำเร็จ · ได้ ${data.length} คู่ · API calls ${j.api_calls||8}/8` +
-      (j.cached ? " · CACHE" : "") +
-      (j.version ? ` · v${j.version}` : "");
+    $("apiStatus").textContent=
+      `เชื่อมสำเร็จ · ได้ ${data.length} คู่ · API calls ${j.api_calls||8}/8 · v${j.version||"6.4"}`;
 
     if(data.length){
-      const b = data[0];
 
-      $("bestPair").textContent = b.pair;
-      $("bestDir").textContent = `${b.direction} · ${b.status}`;
-      $("bestDir").className = "dirbig " + cls(b.direction);
-      $("planTime").textContent = b.entry_time || "--:--:--";
-      $("bestScore").textContent = b.score;
-      $("bestRisk").textContent = b.risk;
+      const b=data[0];
+
+      $("bestPair").textContent=b.pair;
+      $("bestDir").textContent=`${b.direction} · ${b.status}`;
+      $("bestDir").className="dirbig "+cls(b.direction);
+
+      $("planTime").textContent=b.entry_time||"--:--:--";
+      $("bestScore").textContent=b.score;
+      $("bestRisk").textContent=b.risk;
     }
 
     render();
 
   }catch(e){
 
-    $("error").textContent = e.message;
-    $("error").style.display = "block";
-    $("apiStatus").textContent = "เชื่อมข้อมูลไม่สำเร็จ";
+    $("error").textContent=e.message;
+    $("error").style.display="block";
+    $("apiStatus").textContent="เชื่อมข้อมูลไม่สำเร็จ";
 
   }finally{
 
-    $("scanBtn").disabled = false;
-    $("scanBtn").textContent = "สแกน STEP 1";
+    $("scanBtn").disabled=false;
+    $("scanBtn").textContent="สแกน STEP 1";
   }
 }
 
 async function analyze(i){
 
-  const x = data[i];
-  const f = $("f"+i).files[0];
+  const x=data[i];
+  const f=$("f"+i).files[0];
 
   if(!f) return;
 
-  const btn = $("a"+i);
-  btn.disabled = true;
-  btn.textContent = "กำลังวิเคราะห์...";
+  const btn=$("a"+i);
 
-  $("error").style.display = "none";
+  btn.disabled=true;
+  btn.textContent="กำลังวิเคราะห์...";
+  $("error").style.display="none";
 
   try{
 
-    const image = await fileToDataURL(f);
+    const image=await fileToDataURL(f);
 
-    const r = await fetch("/api/analyze",{
+    const r=await fetch("/api/analyze",{
       method:"POST",
       headers:{
         "Content-Type":"application/json"
@@ -916,46 +466,71 @@ async function analyze(i){
       })
     });
 
-    const j = await r.json();
+    const j=await r.json();
 
-    if(!r.ok){
-      throw new Error(j.error || "analyze failed");
-    }
+    if(!r.ok) throw new Error(j.error||"analyze failed");
 
-    const action = j.action || actionText(j);
+    const action=j.action||actionText(j);
 
-    $("r"+i).style.display = "block";
-    $("r"+i).innerHTML = `
-      <div style="font-size:14px;font-weight:900">${j.direction} · ${j.status}</div>
-      <div class="${cls(j.direction)}" style="font-size:26px;font-weight:900;margin-top:4px">${action}</div>
-      <div style="margin-top:6px">AI Score ${j.score}/100 · Risk ${j.risk}</div>
-      <div style="margin-top:6px">${j.reason||""}</div>
+    const delta=
+      typeof j.confirm_delta==="number"
+      ? `${j.confirm_delta>=0?"+":""}${j.confirm_delta}`
+      : "";
+
+    $("r"+i).style.display="block";
+
+    $("r"+i).innerHTML=`
+      <div style="font-size:14px;font-weight:900">
+        ${j.direction} · ${j.status}
+      </div>
+
+      <div class="${cls(j.direction)}"
+           style="font-size:26px;font-weight:900;margin-top:4px">
+        ${action}
+      </div>
+
+      <div style="margin-top:6px">
+        STEP 1 ${x.score}/100 →
+        STEP 2 ${j.score}/100
+        ${delta ? `(${delta})` : ""}
+        · Risk ${j.risk}
+      </div>
+
+      <div style="margin-top:6px">
+        ${j.reason||""}
+      </div>
     `;
 
-    $("fPair").textContent = x.pair;
-    $("fDir").textContent = j.direction;
-    $("fDir").className = cls(j.direction);
-    $("fTime").textContent = j.entry_time || "WAIT";
-    $("fScore").textContent = j.score + "/100";
-    $("fReason").textContent = j.reason || "";
-    $("fAction").textContent = action;
-    $("fAction").className = "actionBig " + cls(j.direction);
+    $("fPair").textContent=x.pair;
+    $("fDir").textContent=j.direction;
+    $("fDir").className=cls(j.direction);
+
+    $("fTime").textContent=j.entry_time||"WAIT";
+
+    $("fScore").textContent=
+      delta
+      ? `${x.score} → ${j.score} (${delta})`
+      : `${j.score}/100`;
+
+    $("fReason").textContent=j.reason||"";
+    $("fAction").textContent=action;
+    $("fAction").className="actionBig "+cls(j.direction);
 
   }catch(e){
 
-    $("error").textContent = e.message;
-    $("error").style.display = "block";
+    $("error").textContent=e.message;
+    $("error").style.display="block";
 
   }finally{
 
-    btn.disabled = false;
-    btn.textContent = "วิเคราะห์ STEP 2";
+    btn.disabled=false;
+    btn.textContent="วิเคราะห์ STEP 2";
   }
 }
 
-$("scanBtn").onclick = scan;
-
+$("scanBtn").onclick=scan;
 scan();
+
 </script>
 
 </main>
