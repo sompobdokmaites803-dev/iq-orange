@@ -1,51 +1,618 @@
 <!doctype html>
-<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>IQ Orange v6.2 — Real-time + Snap Confirm</title>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IQ Orange 10M v6.3 — Setup + Snap Confirm</title>
+
 <style>
-:root{--bg:#090b10;--p:#180f17;--p2:#21111b;--line:#5a2b3d;--tx:#fff2f6;--mut:#cda8b6;--o:#ff7a00;--g:#37d58a;--r:#ff6575;--y:#ffd166;--b:#5f8fff}
-*{box-sizing:border-box}body{margin:0;background:#090b10;color:var(--tx);font-family:Inter,system-ui,-apple-system,"Noto Sans Thai",sans-serif}.wrap{max-width:1760px;margin:auto;padding:26px}.card{background:linear-gradient(180deg,var(--p2),var(--p));border:1px solid var(--line);border-radius:24px}.hero{padding:26px 28px;display:flex;justify-content:space-between;gap:20px}.hero h1{font-size:46px;margin:4px 0 8px}.ey{font-size:16px;font-weight:1000}.sub{color:#e3bdca;font-size:18px;line-height:1.55}.chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.chip{background:var(--o);padding:9px 14px;border-radius:12px;font-weight:1000}.btn{border:1px solid #cf6c8d;background:#9b3552;color:#fff;border-radius:18px;padding:18px 24px;font-size:26px;font-weight:1000;cursor:pointer}.statusbar{margin-top:12px;padding:10px 12px;border-radius:12px;background:#0e1319;border:1px solid #2b3744;color:#d6e0ea;font-size:14px}.summary{display:grid;grid-template-columns:1fr 1.25fr .75fr;gap:16px;margin-top:16px}.summary>.card{padding:22px}.lab{color:#d9afbd;font-size:12px;letter-spacing:.13em;font-weight:900}.pairbig{font-size:40px;font-weight:1000;margin-top:12px}.dirbig{font-size:32px;font-weight:1000}.call{color:var(--g)}.put{color:var(--r)}.timebig{font-size:72px;font-weight:1000;color:var(--o);line-height:1;margin:10px 0}.scorebig{font-size:96px;font-weight:1000;line-height:.9;margin-top:12px}.sectiontitle{margin:24px 0 12px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}.sig{padding:20px}.head{display:flex;justify-content:space-between;gap:10px}.pname{font-size:28px;font-weight:1000}.badge{padding:7px 12px;border-radius:999px;font-weight:1000}.ready{background:#1f6f47}.watch{background:#6d5b17}.no{background:#6e2633}.score{font-size:72px;font-weight:1000}.line{margin-top:7px;color:#ffd3df;font-size:16px}.mut{color:#c098a8}
-.snapbox{margin-top:14px;padding:12px;border:1px dashed #a4516c;border-radius:14px;background:#0e1116}.snapbox input{display:none}.upl{display:block;text-align:center;background:#25141d;border-radius:10px;padding:11px;font-weight:1000;cursor:pointer}.preview{display:none;width:100%;height:150px;object-fit:cover;border-radius:10px;margin-top:10px}.analyze{width:100%;margin-top:10px;border:0;border-radius:10px;padding:11px;background:var(--b);color:#fff;font-weight:1000;cursor:pointer}.analyze:disabled{opacity:.45}.result{display:none;margin-top:10px;padding:10px;border:1px solid #2b3948;border-radius:12px;background:#10161d}.result .decision{font-size:22px;font-weight:1000}.result .etime{font-size:30px;color:var(--o);font-weight:1000}
-.final{margin-top:18px;padding:20px}.finalgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.finalitem{background:#0d1116;border:1px solid #303843;border-radius:14px;padding:14px}.finalitem b{font-size:26px}
-#error{display:none;margin-top:12px;padding:12px;border-radius:12px;background:#411b24;color:#ffb1bd}
-@media(max-width:1200px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:900px){.summary,.finalgrid{grid-template-columns:1fr}.hero{flex-direction:column}.grid{grid-template-columns:1fr}}
-</style></head>
-<body><main class="wrap">
-<section class="hero card"><div><div class="ey">STEP 1 REAL-TIME → STEP 2 SNAP CONFIRM</div><h1>IQ ORANGE 5M v6.2</h1>
-<div class="sub">STEP 1 ใช้ Twelve Data คัดคู่คะแนนสูง → ในแต่ละการ์ดมีช่อง UPLOAD SNAP → STEP 2 วิเคราะห์ภาพ IQ Option จริงเพื่อยืนยัน UP / DOWN / WAIT และเวลาเข้า</div>
-<div class="chips"><span class="chip">8 PAIRS</span><span class="chip">8 CREDITS</span><span class="chip">UPLOAD SNAP</span><span class="chip">SELF ENTRY</span></div>
-<div id="apiStatus" class="statusbar">รอสแกนข้อมูล…</div></div><div><button id="scanBtn" class="btn">สแกน STEP 1</button><div id="error"></div></div></section>
+:root{
+  --bg:#090b10;
+  --panel:#180f17;
+  --panel2:#21111b;
+  --line:#5a2b3d;
+  --txt:#fff2f6;
+  --muted:#cda8b6;
+  --orange:#ff7a00;
+  --green:#37d58a;
+  --red:#ff6575;
+  --yellow:#ffd166;
+  --blue:#5f8fff;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--txt);
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+.wrap{
+  max-width:1760px;
+  margin:auto;
+  padding:24px;
+}
+.card{
+  background:linear-gradient(180deg,var(--panel),#120c13);
+  border:1px solid var(--line);
+  border-radius:22px;
+}
+.hero{
+  padding:24px;
+  display:flex;
+  justify-content:space-between;
+  gap:24px;
+  align-items:flex-start;
+}
+.hero h1{
+  margin:4px 0 10px;
+  font-size:42px;
+}
+.ey{
+  font-size:14px;
+  font-weight:900;
+  letter-spacing:.8px;
+}
+.sub{
+  color:var(--muted);
+  font-size:18px;
+  line-height:1.5;
+}
+.chips{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:14px;
+}
+.chip{
+  background:var(--orange);
+  color:#fff;
+  font-weight:900;
+  padding:9px 14px;
+  border-radius:12px;
+}
+.btn{
+  border:0;
+  background:#a93458;
+  color:#fff;
+  font-weight:900;
+  font-size:22px;
+  padding:18px 28px;
+  border-radius:18px;
+  cursor:pointer;
+}
+.statusbar{
+  margin-top:14px;
+  padding:12px;
+  border:1px solid #303843;
+  border-radius:12px;
+  background:#0d1116;
+}
+#error{
+  display:none;
+  margin-top:12px;
+  padding:12px;
+  border-radius:12px;
+  background:#411b24;
+  color:#ffb1bd;
+}
+.summary{
+  margin-top:18px;
+  display:grid;
+  grid-template-columns:1.2fr 1.4fr .9fr;
+  gap:14px;
+}
+.summary .card{
+  padding:20px;
+}
+.lab{
+  color:#d7a7b8;
+  font-size:14px;
+  font-weight:800;
+  letter-spacing:1px;
+}
+.pairbig{
+  font-size:36px;
+  font-weight:900;
+  margin-top:6px;
+}
+.dirbig{
+  font-size:24px;
+  font-weight:900;
+  margin-top:4px;
+}
+.timebig{
+  font-size:54px;
+  font-weight:900;
+  color:var(--orange);
+  margin-top:8px;
+}
+.scorebig{
+  font-size:68px;
+  font-weight:900;
+}
+.sectiontitle{
+  margin:24px 0 12px;
+}
+.sectiontitle h2{
+  margin:0;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px;
+}
+.sig{
+  padding:16px;
+}
+.head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+}
+.pname{
+  font-size:22px;
+  font-weight:900;
+}
+.badge{
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:900;
+}
+.ready{background:#237a4b}
+.watch{background:#7a650d}
+.no{background:#7a2635}
+.score{
+  font-size:48px;
+  font-weight:900;
+  margin-top:10px;
+}
+.meta{
+  margin-top:6px;
+  line-height:1.55;
+  color:#edd9df;
+}
+.snapbox{
+  margin-top:14px;
+  padding:12px;
+  border:1px dashed #a4516c;
+  border-radius:14px;
+  background:#0e1116;
+}
+.snapbox input{display:none}
+.upl{
+  display:block;
+  text-align:center;
+  background:#2a121c;
+  padding:10px;
+  border-radius:10px;
+  font-weight:900;
+  cursor:pointer;
+}
+.preview{
+  display:none;
+  width:100%;
+  margin-top:10px;
+  border-radius:10px;
+}
+.anbtn{
+  width:100%;
+  margin-top:10px;
+  border:0;
+  border-radius:10px;
+  background:#3c5f9b;
+  color:#fff;
+  font-weight:900;
+  padding:11px;
+  cursor:pointer;
+}
+.anbtn:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+.resultbox{
+  display:none;
+  margin-top:10px;
+  padding:12px;
+  border:1px solid #303843;
+  border-radius:10px;
+  background:#0d1116;
+}
+.final{
+  margin-top:20px;
+  padding:22px;
+}
+.final h2{
+  margin-top:0;
+}
+.actionBox{
+  margin:18px 0;
+  padding:22px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#0d1116;
+}
+.actionLabel{
+  font-size:14px;
+  font-weight:800;
+  letter-spacing:1.5px;
+  color:#f5a8bf;
+}
+.actionBig{
+  margin-top:8px;
+  font-size:40px;
+  line-height:1.12;
+  font-weight:900;
+  color:var(--orange);
+}
+.finalgrid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+}
+.finalitem{
+  background:#0d1116;
+  border:1px solid #303843;
+  border-radius:12px;
+  padding:16px;
+}
+.finalitem b{
+  font-size:28px;
+}
+.reasonBig{
+  margin-top:14px;
+  padding:18px;
+  border-radius:14px;
+  background:#0d1116;
+  border:1px solid #303843;
+  font-size:20px;
+  line-height:1.5;
+  font-weight:700;
+}
+.call{color:var(--green)}
+.put{color:var(--red)}
+.wait{color:var(--orange)}
 
-<section class="summary"><div class="card"><div class="lab">คู่ดีที่สุด</div><div id="bestPair" class="pairbig">—</div><div id="bestDir" class="dirbig">NO TRADE</div></div>
-<div class="card"><div class="lab">เวลาเตรียมเข้า</div><div id="planTime" class="timebig">--:--:--</div><div>รอ Snap Confirm ก่อนกด</div></div>
-<div class="card"><div class="lab">STEP 1 SCORE</div><div id="bestScore" class="scorebig">0</div><div>/100</div><div>Risk: <b id="bestRisk">HIGH</b></div></div></section>
+@media(max-width:1200px){
+  .grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:900px){
+  .hero{flex-direction:column}
+  .summary,.finalgrid{grid-template-columns:1fr}
+  .grid{grid-template-columns:1fr}
+  .timebig{font-size:42px}
+  .actionBig{font-size:30px}
+  .reasonBig{font-size:18px}
+}
+</style>
+</head>
 
-<div class="sectiontitle"><h2>STEP 1 · REAL-TIME FAST CHECK</h2></div><section id="grid" class="grid"></section>
+<body>
+<main class="wrap">
 
-<section class="final card"><h2>STEP 2 · FINAL SNAP CONFIRM</h2>
-<div class="finalgrid"><div class="finalitem"><div class="lab">คู่เงิน</div><b id="fPair">—</b></div><div class="finalitem"><div class="lab">ผล</div><b id="fDir">—</b></div><div class="finalitem"><div class="lab">เวลาเข้า</div><b id="fTime">--:--:--</b></div><div class="finalitem"><div class="lab">AI SCORE</div><b id="fScore">—</b></div></div>
-<div class="statusbar" id="fReason">เลือกคู่ที่คะแนนสูง → อัป Screenshot จาก IQ Option ในการ์ดนั้น → วิเคราะห์ STEP 2</div></section>
+<section class="hero card">
+  <div>
+    <div class="ey">STEP 1 REAL-TIME → STEP 2 SNAP CONFIRM</div>
+    <h1>IQ ORANGE 10M v6.3</h1>
+
+    <div class="sub">
+      STEP 1 ใช้กราฟ 10 นาทีเป็น MAIN SETUP + 15m/1H ดูเทรนด์
+      → เลือกคู่คะแนนสูง → UPLOAD SNAP
+      → STEP 2 วิเคราะห์ภาพ IQ Option เพื่อยืนยัน CALL / PUT / WAIT และ ACTION NOW
+    </div>
+
+    <div class="chips">
+      <span class="chip">8 PAIRS</span>
+      <span class="chip">8 CREDITS</span>
+      <span class="chip">10M SETUP</span>
+      <span class="chip">UPLOAD SNAP</span>
+      <span class="chip">SELF ENTRY</span>
+    </div>
+
+    <div id="apiStatus" class="statusbar">รอสแกนข้อมูล...</div>
+  </div>
+
+  <div>
+    <button id="scanBtn" class="btn">สแกน STEP 1</button>
+    <div id="error"></div>
+  </div>
+</section>
+
+<section class="summary">
+  <div class="card">
+    <div class="lab">คู่ดีที่สุด</div>
+    <div id="bestPair" class="pairbig">—</div>
+    <div id="bestDir" class="dirbig">NO TRADE</div>
+  </div>
+
+  <div class="card">
+    <div class="lab">เวลาเตรียมเข้า</div>
+    <div id="planTime" class="timebig">--:--:--</div>
+    <div>รอ Snap Confirm ก่อนกด</div>
+  </div>
+
+  <div class="card">
+    <div class="lab">STEP 1 SCORE</div>
+    <div id="bestScore" class="scorebig">0</div>
+    <div>/100</div>
+    <div>Risk: <b id="bestRisk">HIGH</b></div>
+  </div>
+</section>
+
+<div class="sectiontitle">
+  <h2>STEP 1 · REAL-TIME 10M CHECK</h2>
+</div>
+
+<section id="grid" class="grid"></section>
+
+<section class="final card">
+  <h2>STEP 2 · FINAL SNAP CONFIRM</h2>
+
+  <div class="actionBox">
+    <div class="actionLabel">ACTION NOW</div>
+    <div id="fAction" class="actionBig">รอวิเคราะห์...</div>
+  </div>
+
+  <div class="finalgrid">
+    <div class="finalitem">
+      <div class="lab">คู่เงิน</div>
+      <b id="fPair">—</b>
+    </div>
+
+    <div class="finalitem">
+      <div class="lab">ผล</div>
+      <b id="fDir">—</b>
+    </div>
+
+    <div class="finalitem">
+      <div class="lab">เวลาเข้า</div>
+      <b id="fTime">--:--:--</b>
+    </div>
+
+    <div class="finalitem">
+      <div class="lab">AI SCORE</div>
+      <b id="fScore">—</b>
+    </div>
+  </div>
+
+  <div id="fReason" class="reasonBig">
+    เลือกคู่คะแนนสูง → อัป Screenshot จาก IQ Option → วิเคราะห์ STEP 2
+  </div>
+</section>
 
 <script>
-const $=x=>document.getElementById(x);let data=[];
-function cls(d){return d==='CALL'||d==='UP'?'call':'put'}function badge(s){return s==='READY'?'ready':s==='WATCH'?'watch':'no'}
-function fileToDataURL(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)})}
+const $ = x => document.getElementById(x);
+let data = [];
+
+function cls(d){
+  if(d==="CALL") return "call";
+  if(d==="PUT") return "put";
+  return "wait";
+}
+
+function badge(s){
+  if(s==="READY") return "ready";
+  if(s==="WATCH") return "watch";
+  return "no";
+}
+
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(r.result);
+    r.onerror=reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function actionText(j){
+  const reason=(j.reason||"").toLowerCase();
+
+  if(j.status==="READY" && j.direction==="CALL"){
+    return "พร้อมเข้า CALL";
+  }
+
+  if(j.status==="READY" && j.direction==="PUT"){
+    return "พร้อมเข้า PUT";
+  }
+
+  if(j.direction==="WAIT"){
+    if(reason.includes("stochastic")){
+      return "รอ Stochastic cross";
+    }
+
+    if(reason.includes("breakout")){
+      return "รอ Breakout confirm";
+    }
+
+    if(reason.includes("momentum")){
+      return "รอ Momentum ยืนยัน";
+    }
+
+    return "รอแท่งถัดไป";
+  }
+
+  if(j.status==="WATCH"){
+    return "WATCH · รอ Confirm เพิ่ม";
+  }
+
+  return "NO TRADE";
+}
+
 function render(){
- $('grid').innerHTML=data.map((x,i)=>`<article class="sig card"><div class="head"><div class="pname">${x.pair}</div><div class="badge ${badge(x.status)}">${x.status}</div></div><div><span class="score">${x.score}</span>/100</div><div class="line ${cls(x.direction)}"><b>${x.direction}</b></div><div class="line">Risk: <b>${x.risk}</b></div><div class="line mut">${x.reason}</div>
- <div class="snapbox"><label class="upl" for="f${i}">UPLOAD SNAP SCREEN</label><input id="f${i}" type="file" accept="image/*"><img id="p${i}" class="preview"><button id="a${i}" class="analyze" disabled>วิเคราะห์ STEP 2</button><div id="r${i}" class="result"><div id="d${i}" class="decision"></div><div id="t${i}" class="etime"></div><div id="w${i}" class="line mut"></div></div></div></article>`).join('');
- data.forEach((x,i)=>{ $('f'+i).onchange=()=>{let f=$('f'+i).files[0];if(f){$('p'+i).src=URL.createObjectURL(f);$('p'+i).style.display='block';$('a'+i).disabled=false}}; $('a'+i).onclick=()=>analyze(i);});
+
+  $("grid").innerHTML = data.map((x,i)=>`
+    <article class="sig card">
+      <div class="head">
+        <div>
+          <div class="pname">${x.pair}</div>
+        </div>
+        <div class="badge ${badge(x.status)}">${x.status}</div>
+      </div>
+
+      <div class="score">${x.score}<span style="font-size:16px">/100</span></div>
+
+      <div class="meta">
+        <b class="${cls(x.direction)}">${x.direction}</b><br>
+        Risk: <b>${x.risk}</b><br>
+        ${x.reason||""}
+      </div>
+
+      <div class="snapbox">
+        <label class="upl" for="f${i}">UPLOAD SNAP SCREEN</label>
+        <input id="f${i}" type="file" accept="image/*">
+
+        <img id="p${i}" class="preview">
+
+        <button id="a${i}" class="anbtn" disabled>
+          วิเคราะห์ STEP 2
+        </button>
+
+        <div id="r${i}" class="resultbox"></div>
+      </div>
+    </article>
+  `).join("");
+
+  data.forEach((x,i)=>{
+
+    $("f"+i).onchange = () => {
+      const f = $("f"+i).files[0];
+
+      if(f){
+        $("p"+i).src = URL.createObjectURL(f);
+        $("p"+i).style.display = "block";
+        $("a"+i).disabled = false;
+      }
+    };
+
+    $("a"+i).onclick = () => analyze(i);
+  });
 }
+
 async function scan(){
- $('scanBtn').disabled=true;$('scanBtn').textContent='SCANNING...';$('error').style.display='none';$('apiStatus').textContent='กำลังเรียก Twelve Data…';
- try{let r=await fetch('/api/scan',{cache:'no-store'});let j=await r.json();if(!r.ok)throw new Error(j.error||'scan failed');data=j.top||[];$('apiStatus').textContent=`เชื่อมสำเร็จ · ได้ ${data.length} คู่ · API calls ${j.api_calls||0}/8`;render();if(data.length){let b=data[0];$('bestPair').textContent=b.pair;$('bestDir').textContent=b.direction+' · '+b.status;$('bestDir').className='dirbig '+cls(b.direction);$('planTime').textContent=b.entry_time;$('bestScore').textContent=b.score;$('bestRisk').textContent=b.risk}}
- catch(e){$('error').textContent=e.message;$('error').style.display='block';$('apiStatus').textContent='เชื่อมข้อมูลไม่สำเร็จ'}
- finally{$('scanBtn').disabled=false;$('scanBtn').textContent='สแกน STEP 1'}
+
+  $("scanBtn").disabled = true;
+  $("scanBtn").textContent = "SCANNING...";
+  $("error").style.display = "none";
+  $("apiStatus").textContent = "กำลังเรียก Twelve Data...";
+
+  try{
+    const r = await fetch("/api/scan",{
+      cache:"no-store"
+    });
+
+    const j = await r.json();
+
+    if(!r.ok){
+      throw new Error(j.error || "scan failed");
+    }
+
+    data = j.top || [];
+
+    $("apiStatus").textContent =
+      `เชื่อมสำเร็จ · ได้ ${data.length} คู่ · API calls ${j.api_calls||8}/8` +
+      (j.cached ? " · CACHE" : "") +
+      (j.version ? ` · v${j.version}` : "");
+
+    if(data.length){
+      const b = data[0];
+
+      $("bestPair").textContent = b.pair;
+      $("bestDir").textContent = `${b.direction} · ${b.status}`;
+      $("bestDir").className = "dirbig " + cls(b.direction);
+      $("planTime").textContent = b.entry_time || "--:--:--";
+      $("bestScore").textContent = b.score;
+      $("bestRisk").textContent = b.risk;
+    }
+
+    render();
+
+  }catch(e){
+
+    $("error").textContent = e.message;
+    $("error").style.display = "block";
+    $("apiStatus").textContent = "เชื่อมข้อมูลไม่สำเร็จ";
+
+  }finally{
+
+    $("scanBtn").disabled = false;
+    $("scanBtn").textContent = "สแกน STEP 1";
+  }
 }
+
 async function analyze(i){
- let x=data[i],f=$('f'+i).files[0];if(!f)return;let btn=$('a'+i);btn.disabled=true;btn.textContent='กำลังวิเคราะห์...';$('error').style.display='none';
- try{let image=await fileToDataURL(f);let r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pair:x.pair,stage1_direction:x.direction,stage1_score:x.score,image})});let j=await r.json();if(!r.ok)throw new Error(j.error||'analyze failed');
- $('r'+i).style.display='block';$('d'+i).textContent=j.direction+' · '+j.status;$('d'+i).className='decision '+cls(j.direction);$('t'+i).textContent=j.entry_time||'WAIT';$('w'+i).textContent='AI Score '+j.score+'/100 · Risk '+j.risk+' · '+j.reason;
- $('fPair').textContent=x.pair;$('fDir').textContent=j.direction;$('fTime').textContent=j.entry_time||'WAIT';$('fScore').textContent=j.score+'/100';$('fReason').textContent=j.reason;
- }catch(e){$('error').textContent=e.message;$('error').style.display='block'}finally{btn.disabled=false;btn.textContent='วิเคราะห์ STEP 2'}
+
+  const x = data[i];
+  const f = $("f"+i).files[0];
+
+  if(!f) return;
+
+  const btn = $("a"+i);
+  btn.disabled = true;
+  btn.textContent = "กำลังวิเคราะห์...";
+
+  $("error").style.display = "none";
+
+  try{
+
+    const image = await fileToDataURL(f);
+
+    const r = await fetch("/api/analyze",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        pair:x.pair,
+        stage1_direction:x.direction,
+        stage1_score:x.score,
+        image:image
+      })
+    });
+
+    const j = await r.json();
+
+    if(!r.ok){
+      throw new Error(j.error || "analyze failed");
+    }
+
+    const action = actionText(j);
+
+    $("r"+i).style.display = "block";
+    $("r"+i).innerHTML = `
+      <div style="font-size:14px;font-weight:900">${j.direction} · ${j.status}</div>
+      <div class="${cls(j.direction)}" style="font-size:26px;font-weight:900;margin-top:4px">${action}</div>
+      <div style="margin-top:6px">AI Score ${j.score}/100 · Risk ${j.risk}</div>
+      <div style="margin-top:6px">${j.reason||""}</div>
+    `;
+
+    $("fPair").textContent = x.pair;
+    $("fDir").textContent = j.direction;
+    $("fDir").className = cls(j.direction);
+    $("fTime").textContent = j.entry_time || "WAIT";
+    $("fScore").textContent = j.score + "/100";
+    $("fReason").textContent = j.reason || "";
+    $("fAction").textContent = action;
+    $("fAction").className = "actionBig " + cls(j.direction);
+
+  }catch(e){
+
+    $("error").textContent = e.message;
+    $("error").style.display = "block";
+
+  }finally{
+
+    btn.disabled = false;
+    btn.textContent = "วิเคราะห์ STEP 2";
+  }
 }
-$('scanBtn').onclick=scan;scan();
-</script></main></body></html>
+
+$("scanBtn").onclick = scan;
+
+scan();
+</script>
+
+</main>
+</body>
+</html>
