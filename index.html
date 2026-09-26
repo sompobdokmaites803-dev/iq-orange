@@ -577,7 +577,7 @@ async function analyze(i){
       throw new Error(j.error || "analyze failed");
     }
 
-    const action = actionText(j);
+    const action = j.action || actionText(j);
 
     $("r"+i).style.display = "block";
     $("r"+i).innerHTML = `
