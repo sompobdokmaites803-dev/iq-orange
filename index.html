@@ -1,67 +1,412 @@
-<!doctype html>
-<html lang="th">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>IQ Orange 10M v6.3 — Setup + Snap Confirm</title>
+import os
+import json
+import urllib.request
+import urllib.error
+import time
+import math
+from datetime import datetime, timezone, timedelta
+from http.server import BaseHTTPRequestHandler
 
-<style>
-:root{
-  --bg:#090b10;
-  --panel:#180f17;
-  --panel2:#21111b;
-  --line:#5a2b3d;
-  --txt:#fff2f6;
-  --muted:#cda8b6;
-  --orange:#ff7a00;
-  --green:#37d58a;
-  --red:#ff6575;
-  --yellow:#ffd166;
-  --blue:#5f8fff;
-}
-*{box-sizing:border-box}
-body{
-  margin:0;
-  background:var(--bg);
-  color:var(--txt);
-  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-}
-.wrap{
-  max-width:1760px;
-  margin:auto;
-  padding:24px;
-}
-.card{
-  background:linear-gradient(180deg,var(--panel),#120c13);
-  border:1px solid var(--line);
-  border-radius:22px;
-}
-.hero{
-  padding:24px;
-  display:flex;
-  justify-content:space-between;
-  gap:24px;
-  align-items:flex-start;
-}
-.hero h1{
-  margin:4px 0 10px;
-  font-size:42px;
-}
-.ey{
-  font-size:14px;
-  font-weight:900;
-  letter-spacing:.8px;
-}
-.sub{
-  color:var(--muted);
-  font-size:18px;
-  line-height:1.5;
-}
-.chips{
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  margin-top:14px;
+
+def call_openai(payload, key):
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/responses",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": "Bearer " + key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=45) as r:
+            return json.loads(r.read().decode())
+
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="ignore")
+        raise RuntimeError(
+            f"OpenAI HTTP {e.code}: {body}"
+        )
+
+
+def extract_output_text(resp):
+    if isinstance(resp.get("output_text"), str):
+        return resp["output_text"]
+
+    texts = []
+
+    for item in resp.get("output", []):
+        if not isinstance(item, dict):
+            continue
+
+        for content in item.get("content", []):
+            if not isinstance(content, dict):
+                continue
+
+            if (
+                content.get("type") == "output_text"
+                and isinstance(content.get("text"), str)
+            ):
+                texts.append(content["text"])
+
+            if content.get("type") == "refusal":
+                raise RuntimeError(
+                    "AI refused: "
+                    + str(content.get("refusal", ""))
+                )
+
+    return "\n".join(texts)
+
+
+class handler(BaseHTTPRequestHandler):
+
+    def do_POST(self):
+
+        try:
+            n = int(
+                self.headers.get(
+                    "Content-Length",
+                    "0"
+                )
+            )
+
+            body = json.loads(
+                self.rfile.read(n).decode()
+            )
+
+            key = os.environ.get(
+                "OPENAI_API_KEY"
+            )
+
+            if not key:
+                raise RuntimeError(
+                    "ยังไม่ได้ตั้ง OPENAI_API_KEY"
+                )
+
+            image = body.get("image")
+
+            if not image:
+                raise RuntimeError(
+                    "ไม่มี screenshot สำหรับ STEP 2"
+                )
+
+            pair = body.get("pair", "")
+            stage1_direction = body.get(
+                "stage1_direction",
+                "WAIT"
+            )
+            stage1_score = int(
+                body.get("stage1_score", 0) or 0
+            )
+
+            prompt = f"""
+คุณคือ STEP 2 FINAL SNAP CONFIRM ของ IQ ORANGE 10M v6.3
+
+โครงสร้างระบบ:
+- 10m = MAIN SETUP
+- 15m = Trend confirm
+- 1H = Big trend
+- Screenshot = Final visual confirmation
+
+คู่เงิน: {pair}
+STEP 1 direction: {stage1_direction}
+STEP 1 score: {stage1_score}
+
+หน้าที่ของคุณ:
+ประเมิน screenshot ล่าสุดจาก IQ Option ว่า
+ภาพช่วยยืนยันหรือหักล้าง STEP 1 มากน้อยแค่ไหน
+
+ใช้คำ direction ชุดเดียวกับระบบเท่านั้น:
+CALL / PUT / WAIT
+
+ให้ประเมินจาก:
+- trend ล่าสุด
+- candle structure
+- support / resistance
+- breakout / rejection
+- momentum
+- stochastic
+- RSI หรือ indicator ที่มองเห็น
+- ระยะจากแนวรับ/แนวต้าน
+- สัญญาณว่าราคาอ่อนแรงหรือเร่งตัว
+- ความสอดคล้องกับ STEP 1
+
+สำคัญ:
+อย่าเพียงคัดลอก score ของ STEP 1
+ให้ประเมิน screenshot อย่างอิสระ แล้วระบุ
+confirm_delta ว่าภาพควรเพิ่มหรือลดความมั่นใจเท่าไร
+
+confirm_delta:
+-20 ถึง +20
+
+ตัวอย่าง:
+- ภาพยืนยัน trend + momentum ชัด: +10 ถึง +20
+- ยืนยันบางส่วน: +3 ถึง +9
+- ยังไม่ชัด: -2 ถึง +2
+- มีสัญญาณขัดแย้ง: -5 ถึง -12
+- ขัดแย้งมาก / setup เสีย: -13 ถึง -20
+
+กฎ:
+1. ถ้าภาพยืนยัน STEP 1 ชัด ให้ direction เดิม
+2. ถ้าภาพขัดแย้ง ให้ WAIT หรือ direction ที่เห็นจริง
+3. ถ้า screenshot ไม่ชัด / popup บัง / คู่เงินไม่ตรง ให้ WAIT
+4. READY ต้องใช้เมื่อหลักฐานภาพชัดจริง
+5. WAIT ห้าม READY
+6. reason เป็นภาษาไทยสั้น 1-2 ประโยค
+7. action เลือกเพียงหนึ่งข้อ:
+   พร้อมเข้า CALL
+   พร้อมเข้า PUT
+   รอแท่งถัดไป
+   รอ Stochastic cross
+   รอ Breakout confirm
+   รอ Momentum ยืนยัน
+   NO TRADE
+"""
+
+            schema = {
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "enum": [
+                            "CALL",
+                            "PUT",
+                            "WAIT"
+                        ]
+                    },
+                    "confirm_delta": {
+                        "type": "integer",
+                        "minimum": -20,
+                        "maximum": 20
+                    },
+                    "risk": {
+                        "type": "string",
+                        "enum": [
+                            "LOW",
+                            "MEDIUM",
+                            "HIGH"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "READY",
+                            "WATCH",
+                            "NO TRADE"
+                        ]
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "พร้อมเข้า CALL",
+                            "พร้อมเข้า PUT",
+                            "รอแท่งถัดไป",
+                            "รอ Stochastic cross",
+                            "รอ Breakout confirm",
+                            "รอ Momentum ยืนยัน",
+                            "NO TRADE"
+                        ]
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "direction",
+                    "confirm_delta",
+                    "risk",
+                    "status",
+                    "action",
+                    "reason"
+                ],
+                "additionalProperties": False
+            }
+
+            payload = {
+                "model": "gpt-5.6-luna",
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": prompt
+                            },
+                            {
+                                "type": "input_image",
+                                "image_url": image
+                            }
+                        ]
+                    }
+                ],
+                "text": {
+                    "format": {
+                        "type": "json_schema",
+                        "name": "iq_orange_step2_v64",
+                        "strict": True,
+                        "schema": schema
+                    }
+                },
+                "max_output_tokens": 450
+            }
+
+            resp = call_openai(
+                payload,
+                key
+            )
+
+            text = extract_output_text(resp)
+
+            if not text:
+                raise RuntimeError(
+                    "AI returned no output_text: "
+                    + json.dumps(
+                        resp,
+                        ensure_ascii=False
+                    )[:1200]
+                )
+
+            try:
+                d = json.loads(text)
+
+            except Exception:
+                raise RuntimeError(
+                    "AI JSON parse failed: "
+                    + text[:1000]
+                )
+
+            direction = d.get(
+                "direction",
+                "WAIT"
+            )
+
+            status = d.get(
+                "status",
+                "WATCH"
+            )
+
+            action = d.get(
+                "action",
+                "รอแท่งถัดไป"
+            )
+
+            delta = int(
+                d.get(
+                    "confirm_delta",
+                    0
+                )
+            )
+
+            final_score = max(
+                0,
+                min(
+                    100,
+                    stage1_score + delta
+                )
+            )
+
+            if direction == "WAIT":
+                if status == "READY":
+                    status = "WATCH"
+
+                if action in [
+                    "พร้อมเข้า CALL",
+                    "พร้อมเข้า PUT"
+                ]:
+                    action = "รอแท่งถัดไป"
+
+            # กันกรณี score ต่ำแต่ AI บอก READY
+            if final_score < 80 and status == "READY":
+                status = "WATCH"
+
+            if final_score < 65:
+                status = "NO TRADE"
+
+                if action in [
+                    "พร้อมเข้า CALL",
+                    "พร้อมเข้า PUT"
+                ]:
+                    action = "NO TRADE"
+
+            # risk ผูกกับ final score
+            if final_score >= 90:
+                risk = "LOW"
+            elif final_score >= 75:
+                risk = "MEDIUM"
+            else:
+                risk = "HIGH"
+
+            entry = None
+
+            if (
+                direction in ["CALL", "PUT"]
+                and status == "READY"
+            ):
+                ten_min = 600
+
+                ep = (
+                    math.floor(
+                        time.time() / ten_min
+                    ) + 1
+                ) * ten_min + 5
+
+                entry = datetime.fromtimestamp(
+                    ep,
+                    timezone(
+                        timedelta(hours=7)
+                    )
+                ).strftime(
+                    "%H:%M:%S"
+                )
+
+            out = {
+                "direction": direction,
+                "score": final_score,
+                "stage1_score": stage1_score,
+                "confirm_delta": delta,
+                "risk": risk,
+                "status": status,
+                "action": action,
+                "reason": d.get(
+                    "reason",
+                    ""
+                ),
+                "entry_time": entry,
+                "setup_tf": "10m",
+                "version": "6.4"
+            }
+
+            code = 200
+
+        except Exception as e:
+
+            out = {
+                "error": str(e)
+            }
+
+            code = 500
+
+        b = json.dumps(
+            out,
+            ensure_ascii=False
+        ).encode()
+
+        self.send_response(code)
+
+        self.send_header(
+            "Content-Type",
+            "application/json; charset=utf-8"
+        )
+
+        self.send_header(
+            "Cache-Control",
+            "no-store"
+        )
+
+        self.end_headers()
+
+        self.wfile.write(b)  margin-top:14px;
 }
 .chip{
   background:var(--orange);
